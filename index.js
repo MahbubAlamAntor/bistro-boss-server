@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 const jwt = require('jsonwebtoken')
-require('dotenv').config()
+require('dotenv').config();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
 const port = process.env.PROT || 5000;
@@ -29,6 +30,7 @@ async function run() {
         const menuCollections = client.db('bistroBoss').collection('menu')
         const reviewsCollections = client.db('bistroBoss').collection('reviews')
         const cartCollections = client.db('bistroBoss').collection('carts')
+        const paymentCollections = client.db('bistroBoss').collection('payments')
         // Connect the client to the server	(optional starting in v4.7)
         // await client.connect();
         // Send a ping to confirm a successful connection
@@ -129,9 +131,9 @@ async function run() {
             res.send(result)
         });
 
-        app.get('/menu/:id', async(req, res) => {
+        app.get('/menu/:id', async (req, res) => {
             const id = req.params.id;
-            const query = {_id: new ObjectId(id)};
+            const query = { _id: new ObjectId(id) };
             const result = await menuCollections.findOne(query);
             res.send(result)
         })
@@ -142,10 +144,10 @@ async function run() {
             res.send(result)
         });
 
-        app.patch('/menu/:id', async(req, res) => {
+        app.patch('/menu/:id', async (req, res) => {
             const items = req.body;
             const id = req.params.id;
-            const query = {_id: new ObjectId(id)}
+            const query = { _id: new ObjectId(id) }
             const updateDoc = {
                 $set: {
                     name: items.name,
@@ -159,7 +161,7 @@ async function run() {
             res.send(result)
         })
 
-        app.delete('/menu/:id',verifyToken, verifyAdmin, async (req, res) => {
+        app.delete('/menu/:id', verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await menuCollections.deleteOne(query);
@@ -193,7 +195,53 @@ async function run() {
             const query = { _id: new ObjectId(id) };
             const result = await cartCollections.deleteOne(query);
             res.send(result)
+        });
+
+        // stripe intent
+
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            // console.log(amount);
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        });
+
+        // payment related api
+
+        app.post('/payments', async (req, res) => {
+            const payment = req.body;
+            const result = await paymentCollections.insertOne(payment);
+            // console.log("Payment", payment.payment.cartIds);
+            const query = {
+                _id: {
+                    $in: payment?.cartIds?.map(id => new ObjectId(id))
+                }
+            };
+            // console.log("query", query);
+            const deleteResult = await cartCollections.deleteMany(query);
+            res.send({ result, deleteResult })
+        });
+
+        app.get('/payments/:email', verifyToken, async (req, res) => {
+            const query = { email: req.params.email };
+            // console.log("payment", query);
+            // console.log(req.decoded.email);
+            // console.log("params", req.params.email);
+            if (req.params.email !== req.decoded.email) {
+                return res.status(403).send({ message: 'Forbidden Access' })
+            }
+            const result = await paymentCollections.find(query).toArray();
+            res.send(result)
         })
+
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
