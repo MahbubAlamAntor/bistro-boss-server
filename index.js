@@ -73,8 +73,9 @@ async function run() {
             next();
         }
 
-        app.get('/user/:email', verifyToken, async (req, res) => {
+        app.get('/user/admin/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
+            // console.log(email);
             if (email !== req.decoded.email) {
                 return res.status(403).send({ message: 'forbidden access' })
             }
@@ -240,7 +241,38 @@ async function run() {
             }
             const result = await paymentCollections.find(query).toArray();
             res.send(result)
-        })
+        });
+
+        // stats or analytics
+
+        app.get('/admin-states', verifyToken, verifyAdmin, async(req, res) => {
+            const users = await usersCollections.estimatedDocumentCount();
+            const menuItems = await menuCollections.estimatedDocumentCount();
+            const orders = await paymentCollections.estimatedDocumentCount();
+            // const paymentPrice = await paymentCollections.find().toArray();
+            // console.log(paymentPrice);
+            // const revenue = paymentPrice?.reduce((items, payment) => items + payment.price ,0)
+
+            const result = await paymentCollections.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalRevenue: {
+                            $sum: '$price',
+                        }
+                    }
+                }
+            ]).toArray();
+
+            const revenue = result.length > 0 ? result[0].totalRevenue : 0 ;
+
+            res.send({
+                users,
+                menuItems,
+                orders,
+                revenue
+            })
+        });
 
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
