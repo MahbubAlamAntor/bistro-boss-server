@@ -245,7 +245,7 @@ async function run() {
 
         // stats or analytics
 
-        app.get('/admin-states', verifyToken, verifyAdmin, async(req, res) => {
+        app.get('/admin-states', verifyToken, verifyAdmin, async (req, res) => {
             const users = await usersCollections.estimatedDocumentCount();
             const menuItems = await menuCollections.estimatedDocumentCount();
             const orders = await paymentCollections.estimatedDocumentCount();
@@ -264,7 +264,7 @@ async function run() {
                 }
             ]).toArray();
 
-            const revenue = result.length > 0 ? result[0].totalRevenue : 0 ;
+            const revenue = result.length > 0 ? result[0].totalRevenue : 0;
 
             res.send({
                 users,
@@ -273,6 +273,46 @@ async function run() {
                 revenue
             })
         });
+
+        app.get('/order/stats', async (req, res) => {
+            const result = await paymentCollections.aggregate([
+                {
+                    $unwind: '$menuIds'
+                },
+                {
+                    $addFields: {
+                        menuIds: { $toObjectId: '$menuIds' },
+                    },
+                },
+                {
+                    $lookup: {
+                        from: 'menu',
+                        localField: 'menuIds',
+                        foreignField: '_id',
+                        as: 'menu'
+                    }
+                },
+                {
+                    $unwind: "$menu"
+                },
+                {
+                    $group: {
+                        _id: '$menu.category',
+                        quantity: {$sum: 1 },
+                        revenue: {$sum: '$menu.price'}
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        category: '$_id',
+                        quantity: '$quantity',
+                        revenue: '$revenue'
+                    }
+                }
+            ]).toArray();
+            res.send(result)
+        })
 
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
