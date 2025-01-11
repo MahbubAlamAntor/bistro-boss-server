@@ -47,9 +47,11 @@ async function run() {
         // middleware 
 
         const verifyToken = (req, res, next) => {
+            console.log(req.headers.authorization);
             if (!req.headers.authorization) {
                 return res.status(401).send({ message: 'unauthorize access' })
             }
+            
             const token = req.headers.authorization.split(' ')[1];
             jwt.verify(token, process.env.JWT_TOKEN, (err, decoded) => {
                 if (err) {
@@ -314,8 +316,8 @@ async function run() {
             res.send(result)
         })
 
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
